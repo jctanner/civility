@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 # http://stackoverflow.com/questions/2923420/fuzzy-string-matching-algorithm-in-python
 # http://stackoverflow.com/questions/682367/good-python-modules-for-fuzzy-string-comparison
@@ -166,16 +166,18 @@ def loadlog(logfile, use_cache=False):
 #sortquestions(questions)
 #epdb.st()                        
 
-cache_file = "/tmp/question.pickle"
-log_file = sys.argv[1]
-if len(sys.argv) > 2:
-    use_cache = sys.argv[2] 
-    if str(use_cache) in ['True', 'true', 'yes', '0']:
-        use_cache = True
+if __name__ == "__main__":
+
+    cache_file = "/tmp/question.pickle"
+    log_file = sys.argv[1]
+    if len(sys.argv) > 2:
+        use_cache = sys.argv[2] 
+        if str(use_cache) in ['True', 'true', 'yes', '0']:
+            use_cache = True
+        else:
+            use_cache = False
     else:
-        use_cache = False
-else:
-    use_cache = True
-#epdb.st()
-questions = loadlog(log_file, use_cache=use_cache)
-sortquestions(questions)        
+        use_cache = True
+    #epdb.st()
+    questions = loadlog(log_file, use_cache=use_cache)
+    sortquestions(questions)        
