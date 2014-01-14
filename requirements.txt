@@ -3,3 +3,6 @@ python-Levenshtein
 textblob
 textblob-aptagger
 wordgrapher
+irclog2html
+python-dateutil
+argparse
