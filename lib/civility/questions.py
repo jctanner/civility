@@ -105,7 +105,7 @@ def loadlog(logfile, use_cache=False):
         print "invalid filename: %s" % logfile
         sys.exit(1)
 
-    if not use_cache:
+    if not use_cache or not os.path.isfile(cache_file):
         filedata = open(logfile, "r").read()
         lines = filedata.split("\n")
 
