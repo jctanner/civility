@@ -21,7 +21,10 @@ class xchatLog(object):
         self.train_file = "~/question_training"
         self.train_file = os.path.expanduser(self.train_file)
         self.train = []
-        self.known_sentences = []
+        #self.known_sentence_file = os.path.expanduser("~/known_questions")
+        #self.known_sentences = []
+        self.processed_tuples = {}
+        self.processed_tuples_file = os.path.expanduser("processed_tuples")
         self.logdata = None
         self.cache = cache
         self.cache_file = None
@@ -96,7 +99,7 @@ class xchatLog(object):
                     sentence = sentence[1:-1] #strip outside quotes
                     category = row[1]
                     self.train.append((sentence, category))
-                    self.known_sentences.append(sentence)
+                    #self.known_sentences.append(sentence)
         else:
             open(self.train_file, "a").close()
         #sys.exit()                
@@ -105,12 +108,23 @@ class xchatLog(object):
                 ("What is a handler?", "g"),
                 ("I like to party", "b")
             ]
-                                
+
+    def _pdump_processed_tuples(self):
+
+        pickle.dump(self.processed_tuples, open(self.processed_tuples_file, "wb"))        
+
+    def _pload_processed_tuples(self):
+        if os.path.isfile(self.processed_tuples_file):
+            self.processed_tuples = pickle.load(open(self.processed_tuples_file, "rb"))
+            return True
+        else:
+            return False
 
 
     def process_questions(self):
 
         self._load_training_data()
+        self._pload_processed_tuples()
 
         five_ws = [ "who", "what", "where", "when", "why" ]
 
@@ -127,6 +141,7 @@ class xchatLog(object):
             " doc about ",
             "tutorial",
             "release",
+            "external inventory", "inventory file",
             "playbook", "play", "role", "task", "handler",
             "variable", "var",
             "connection", "async", "accelerate",
@@ -140,15 +155,14 @@ class xchatLog(object):
             "public key"
         ]
 
-        train_file = "/tmp/question_training"
-
         cl = NaiveBayesClassifier(self.train)
     
         ks = [ int(x) for x in self.logdata.keys() ]
-        #for k in sorted(ks):
-        random.shuffle(ks)
-        for k in ks:
+        sorted_ks = sorted(ks)
+        total_ks = sorted_ks[-1]
+        for k in sorted_ks:
             k_str = str(k)
+            print total_ks,"-",k_str
 
             this_msg = self.logdata[k_str]['message']
             text_obj = TextBlob(this_msg)
@@ -161,17 +175,10 @@ class xchatLog(object):
                         #self.known_sentences.append(sent)
                         continue
 
-                    if str(sent) in self.known_sentences:
+                    if str(sent) in self.processed_tuples:
                         continue
 
                     if sent.endswith("?") and [ x for x in sent.words if x.lower() in five_ws ]:
-                        print "##############################\n"
-                        """
-                        try:
-                            print sent
-                        except UnicodeDecodeError:
-                            print "unicode error"
-                        """
 
                         curr_rating = cl.classify(sent)
 
@@ -180,33 +187,49 @@ class xchatLog(object):
                             if ph in str(sent):
                                 triggered = True                            
 
-                        print sent
-                        print "\n"
-                        print "rating: %s" % curr_rating
-                        print "triggered: %s" % triggered
+                        this_tuple = (k, sent, curr_rating, triggered)
+                        self.processed_tuples[str(sent)] = this_tuple
+                        #self.known_sentences.append(str(sent))
 
-                        if ( curr_rating == "b" and triggered ) or ( curr_rating == "g" and not triggered ):
-                            #continue
-                            q_string = "\n$ g(ood) question or b(ad) question? (default: %s): " % curr_rating
-                            x = raw_input(q_string)                            
-                        else:
-                            x = str(curr_rating)
+        # save what we have
+        self._pdump_processed_tuples()
 
-                        print "\n"
+        for pt in self.processed_tuples.keys():        
+            print "##############################\n"
 
-                        if x == "":
-                            this_tup = [ (str(sent), curr_rating) ]
-                            cl.update(this_tup)
-                            self.known_sentences.append(str(sent))
-                            open(self.train_file, "a").write("'%s';%s\n" % (sent, curr_rating))
-                        elif x == "b" or x == "g":
-                            this_tup = [ (str(sent), x) ]
-                            cl.update(this_tup)
-                            self.known_sentences.append(str(sent))
-                            open(self.train_file, "a").write("'%s';%s\n" % (sent, x))
-                        elif x == "break":
-                            pass
-                        
+            #import epdb; epdb.st()
+            k = self.processed_tuples[pt][0]
+            sent = self.processed_tuples[pt][1]
+            curr_rating = self.processed_tuples[pt][2]
+            triggered = self.processed_tuples[pt][3]
+
+            print sent
+            print "\n"
+            print "rating: %s" % curr_rating
+            print "triggered: %s" % triggered
+
+            if ( curr_rating == "b" and triggered ) or ( curr_rating == "g" and not triggered ):
+                #continue
+                q_string = "\n$ g(ood) question or b(ad) question? (default: %s): " % curr_rating
+                x = raw_input(q_string)                            
+            else:
+                x = str(curr_rating)
+
+            print "\n"
+
+            if x == "":
+                this_tup = [ (str(sent), curr_rating) ]
+                cl.update(this_tup)
+                #self.known_sentences.append(str(sent))
+                open(self.train_file, "a").write("'%s';%s\n" % (sent, curr_rating))
+            elif x == "b" or x == "g":
+                this_tup = [ (str(sent), x) ]
+                cl.update(this_tup)
+                #self.known_sentences.append(str(sent))
+                open(self.train_file, "a").write("'%s';%s\n" % (sent, x))
+            elif x == "break":
+                pass
+            
 
     def show(self):
     
