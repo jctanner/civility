@@ -11,12 +11,17 @@ from log_parser_xchat import xchatlog_to_dict
 from textblob import TextBlob
 from textblob.classifiers import NaiveBayesClassifier
 
+import random
 
 
 class xchatLog(object):
 
     def __init__(self, filename, cache=True):
         self.filename = filename
+        self.train_file = "~/question_training"
+        self.train_file = os.path.expanduser(self.train_file)
+        self.train = []
+        self.known_sentences = []
         self.logdata = None
         self.cache = cache
         self.cache_file = None
@@ -82,18 +87,18 @@ class xchatLog(object):
 
 
     def _load_training_data(self):
-        self.train_file = "/tmp/question_training"
-        self.train = []
-        self.known_sentences = []
-        with open(self.train_file, 'rb') as csvfile:
-            rows = csv.reader(csvfile, delimiter=';', quotechar='"')
-            for row in rows:
-                #print row
-                sentence = row[0]
-                sentence = sentence[1:-1] #strip outside quotes
-                category = row[1]
-                self.train.append((sentence, category))
-                self.known_sentences.append(sentence)
+        if os.path.isfile(self.train_file):
+            with open(self.train_file, 'rb') as csvfile:
+                rows = csv.reader(csvfile, delimiter=';', quotechar='"')
+                for row in rows:
+                    #print row
+                    sentence = row[0]
+                    sentence = sentence[1:-1] #strip outside quotes
+                    category = row[1]
+                    self.train.append((sentence, category))
+                    self.known_sentences.append(sentence)
+        else:
+            open(self.train_file, "a").close()
         #sys.exit()                
         if len(self.train) == 0:
             self.train = [
@@ -111,83 +116,96 @@ class xchatLog(object):
 
         trigger_phrases = [
             "best practice",
-            "simplest way"
+            "best way",
+            "simplest way",
             "preferred nomenclature",
+            "preferred location",
+            " have any recommendation",
+            "exact command",
             "documentation",
             " doc for ",
-            "playbook",
-            "role",
-            "task",
-            "play",
-            "variable",
-            "var",
-            "handler",
-            "connection",
-            "{{",
-            "}}",
-            "lookup",
+            " doc about ",
+            "tutorial",
+            "release",
+            "playbook", "play", "role", "task", "handler",
+            "variable", "var",
+            "connection", "async", "accelerate",
+            "{{", "}}",
+            "lookup", "plugin", "callback",
             "hang",
-            "plugin"
+            "conditional", "when:"
+            "group",
+            "ec2 module", "route53",
+            "fault tolerance",
+            "public key"
         ]
 
         train_file = "/tmp/question_training"
-        #good_questions = []
-        #bad_questsion = []
 
         cl = NaiveBayesClassifier(self.train)
     
         ks = [ int(x) for x in self.logdata.keys() ]
-        for k in sorted(ks):
+        #for k in sorted(ks):
+        random.shuffle(ks)
+        for k in ks:
             k_str = str(k)
 
             this_msg = self.logdata[k_str]['message']
             text_obj = TextBlob(this_msg)
-            #import epdb; epdb.st()
 
             if hasattr(text_obj, "raw_sentences"):
                 for sent in text_obj.sentences:
                     try:
                         str(sent)
                     except UnicodeDecodeError:
-                        #import epdb; epdb.st()
+                        #self.known_sentences.append(sent)
                         continue
+
                     if str(sent) in self.known_sentences:
                         continue
+
                     if sent.endswith("?") and [ x for x in sent.words if x.lower() in five_ws ]:
-                        #import epdb; epdb.st()
                         print "##############################\n"
+                        """
                         try:
                             print sent
                         except UnicodeDecodeError:
                             print "unicode error"
+                        """
 
                         curr_rating = cl.classify(sent)
 
-                        #import epdb; epdb.st()
                         triggered = False
                         for ph in trigger_phrases:
                             if ph in str(sent):
                                 triggered = True                            
 
-                        if curr_rating == "b" and triggered:
+                        print sent
+                        print "\n"
+                        print "rating: %s" % curr_rating
+                        print "triggered: %s" % triggered
+
+                        if ( curr_rating == "b" and triggered ) or ( curr_rating == "g" and not triggered ):
                             #continue
                             q_string = "\n$ g(ood) question or b(ad) question? (default: %s): " % curr_rating
                             x = raw_input(q_string)                            
                         else:
-                            x == curr_rating
+                            x = str(curr_rating)
+
+                        print "\n"
 
                         if x == "":
                             this_tup = [ (str(sent), curr_rating) ]
                             cl.update(this_tup)
-                            self.known_sentences.append(sent)
+                            self.known_sentences.append(str(sent))
                             open(self.train_file, "a").write("'%s';%s\n" % (sent, curr_rating))
-                        elif x == "b" or x =="g":
+                        elif x == "b" or x == "g":
                             this_tup = [ (str(sent), x) ]
                             cl.update(this_tup)
-                            self.known_sentences.append(sent)
+                            self.known_sentences.append(str(sent))
                             open(self.train_file, "a").write("'%s';%s\n" % (sent, x))
                         elif x == "break":
-                            import epdb; epdb.st()
+                            pass
                         
 
     def show(self):
